@@ -12,7 +12,6 @@ def format_chatml(instruction: str, user_input: str, response: str = None, token
     bos = tokenizer.bos_token if (tokenizer and hasattr(tokenizer, 'bos_token')) else ""
     eos = tokenizer.eos_token if (tokenizer and hasattr(tokenizer, 'eos_token')) else "<|im_end|>"
     
-    # Enhanced system prompt to ensure native script & romanized responses match effectively
     prompt = (
         f"{bos}<|im_start|>system\nतपाईं एक उपयोगी नेपाली AI सहायक हुनुहुन्छ। "
         f"कृपया नेपाली देवनागरी लिपि (Devanagari script) र नेपाली रोमन (Romanized Nepali / Nepenglish) दुबै भाषामा सोधिएका प्रश्नहरू बुझेर स्पष्ट र सही उत्तर दिनुहोस्।<|im_end|>\n"
@@ -81,20 +80,22 @@ def load_summarization_data(n_train: int = 3000, n_val: int = 300, tokenizer=Non
     print("[Summarization] Loading flat public Nepali summarization CSV corpus...")
     filtered = []
     
-    # Load directly to bypass streaming column-mapping and .py file blockages entirely
     dataset = load_dataset("realsanjeev/nepali-summarization-dataset", split="train")
     
     for ex in dataset:
-        article = ex.get('text') or ex.get('article') or ''
-        summary = ex.get('summary') or ''
+        # Fallback to case-insensitive and alternative column names present in the CSV
+        article = ex.get('text') or ex.get('article') or ex.get('Text') or ex.get('Article') or ''
+        summary = ex.get('summary') or ex.get('Summary') or ''
         
         if is_valid_summarization(article, summary):
             filtered.append({"article": str(article).strip(), "summary": str(summary).strip()})
         if len(filtered) >= (n_train + n_val):
             break
 
-    train_data = filtered[:n_train]
-    val_data = filtered[n_train:n_train + n_val]
+    # Fallback in case dataset size is smaller than requested limits
+    actual_train = min(n_train, int(len(filtered) * 0.9))
+    train_data = filtered[:actual_train]
+    val_data = filtered[actual_train:actual_train + n_val] if actual_train < len(filtered) else filtered[actual_train:]
 
     train_formatted = [{"text": format_summarization(x["article"], x["summary"], tokenizer)} for x in train_data]
     val_formatted = [{"text": format_summarization(x["article"], x["summary"], tokenizer), "article": x["article"], "summary": x["summary"]} for x in val_data]
@@ -109,14 +110,25 @@ def load_qa_data(tokenizer=None):
     data = []
     
     for ex in dataset:
-        question = ex.get("question") or ex.get("instruction") or ''
-        context = ex.get("context") or ex.get("input") or 'दिएको सन्दर्भ विवरण'
-        answer = ex.get("answer") or ex.get("output") or ''
+        # Check if dataset is in ShareGPT / Conversational list format
+        if "conversations" in ex and isinstance(ex["conversations"], list):
+            question = ""
+            answer = ""
+            for turn in ex["conversations"]:
+                if turn.get("from") == "human":
+                    question = turn.get("value", "")
+                elif turn.get("from") == "gpt":
+                    answer = turn.get("value", "")
+            context = "दिएको सन्दर्भ विवरण"
+        else:
+            question = ex.get("question") or ex.get("instruction") or ''
+            context = ex.get("context") or ex.get("input") or 'दिएको सन्दर्भ विवरण'
+            answer = ex.get("answer") or ex.get("output") or ''
         
         if question and answer:
             data.append({"context": str(context).strip(), "question": str(question).strip(), "answer": str(answer).strip()})
 
-    split_idx = int(len(data) * 0.8)
+    split_idx = int(len(data) * 0.9)
     train_data = data[:split_idx]
     val_data = data[split_idx:]
 
