@@ -171,11 +171,51 @@ def load_translation_data(n_train: int = 5000, n_val: int = 500, tokenizer=None,
     return train_formatted, val_formatted, test_formatted
 
 
+def _load_xlsum_jsonl(split: str):
+    """
+    csebuetnlp/xlsum's load_dataset script is no longer supported (HF disabled
+    script-based dataset loading). The raw per-language .jsonl files still exist
+    in the repo though, so we download and extract the tarball directly.
+    """
+    import tarfile, json as _json, glob, os
+    from huggingface_hub import hf_hub_download
+
+    archive_path = hf_hub_download(
+        repo_id="csebuetnlp/xlsum",
+        repo_type="dataset",
+        filename="data/nepali_XLSum_v2.0.tar.bz2",
+    )
+    extract_dir = "/kaggle/working/xlsum_nepali_extracted"
+    if not os.path.exists(extract_dir):
+        os.makedirs(extract_dir, exist_ok=True)
+        with tarfile.open(archive_path, "r:bz2") as tar:
+            tar.extractall(extract_dir)
+
+    # filenames inside the tarball are typically nepali_{train,val,test}.jsonl
+    candidates = glob.glob(f"{extract_dir}/**/*{split}*.jsonl", recursive=True)
+    if not candidates:
+        raise FileNotFoundError(f"No '{split}' jsonl found in extracted xlsum archive: {os.listdir(extract_dir)}")
+
+    examples = []
+    with open(candidates[0], "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                examples.append(_json.loads(line))
+    return examples
+
+
 def load_summarization_data(n_train: int = 3000, n_val: int = 300, tokenizer=None):
     """Load xlsum nepali — BBC quality, best available."""
-    print("[Summarization] Loading xlsum nepali ...")
-    raw_train = load_dataset("csebuetnlp/xlsum", "nepali", split="train")
-    raw_val = load_dataset("csebuetnlp/xlsum", "nepali", split="validation")
+    print("[Summarization] Loading xlsum nepali (direct archive download) ...")
+    try:
+        raw_train = _load_xlsum_jsonl("train")
+        raw_val = _load_xlsum_jsonl("val")
+    except Exception as e:
+        print(f"[Warning] xlsum direct download failed ({e}). "
+              f"Falling back to csebuetnlp/xlsum via load_dataset (may also fail).")
+        raw_train = load_dataset("csebuetnlp/xlsum", "nepali", split="train")
+        raw_val = load_dataset("csebuetnlp/xlsum", "nepali", split="validation")
 
     def process_split(raw, n):
         results = []
