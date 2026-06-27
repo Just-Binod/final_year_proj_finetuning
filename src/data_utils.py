@@ -5,15 +5,17 @@ from pathlib import Path
 from datasets import load_dataset
 
 # ─────────────────────────────────────────────
-# PROMPT TEMPLATES (ChatML Style for Fine-Tuning)
+# PROMPT TEMPLATES (ChatML Style with Nepenglish Support)
 # ─────────────────────────────────────────────
 
 def format_chatml(instruction: str, user_input: str, response: str = None, tokenizer=None) -> str:
     bos = tokenizer.bos_token if (tokenizer and hasattr(tokenizer, 'bos_token')) else ""
     eos = tokenizer.eos_token if (tokenizer and hasattr(tokenizer, 'eos_token')) else "<|im_end|>"
     
+    # Enhanced system prompt to ensure native script & romanized responses match effectively
     prompt = (
-        f"{bos}<|im_start|>system\nतपाईं एक उपयोगी नेपाली AI सहायक हुनुहुन्छ।<|im_end|>\n"
+        f"{bos}<|im_start|>system\nतपाईं एक उपयोगी नेपाली AI सहायक हुनुहुन्छ। "
+        f"कृपया नेपाली देवनागरी लिपि (Devanagari script) र नेपाली रोमन (Romanized Nepali / Nepenglish) दुबै भाषामा सोधिएका प्रश्नहरू बुझेर स्पष्ट र सही उत्तर दिनुहोस्।<|im_end|>\n"
         f"<|im_start|>user\n{instruction}\n{user_input.strip()}<|im_end|>\n"
         f"<|im_start|>assistant\n"
     )
@@ -50,7 +52,7 @@ def is_valid_summarization(article: str, summary: str) -> bool:
 
 
 # ─────────────────────────────────────────────
-# ROBUST PARQUET LOADERS (Bypasses Script Blocks)
+# ROBUST SCRIPT-FREE DATASET LOADERS
 # ─────────────────────────────────────────────
 
 def load_translation_data(n_train: int = 5000, n_val: int = 500, tokenizer=None):
@@ -76,13 +78,14 @@ def load_translation_data(n_train: int = 5000, n_val: int = 500, tokenizer=None)
 
 
 def load_summarization_data(n_train: int = 3000, n_val: int = 300, tokenizer=None):
-    print("[Summarization] Loading Parquet-converted XL-Sum Nepali split...")
-    # FIX: Using the direct parquet-converted repository layout to bypass xlsum.py script error
-    dataset = load_dataset("csebuetnlp/xlsum", "nepali", split="train", data_files="nepali_train.parquet")
+    print("[Summarization] Loading flat public Nepali summarization CSV corpus...")
     filtered = []
     
+    # Load directly to bypass streaming column-mapping and .py file blockages entirely
+    dataset = load_dataset("realsanjeev/nepali-summarization-dataset", split="train")
+    
     for ex in dataset:
-        article = ex.get('text') or ex.get('main_text') or ''
+        article = ex.get('text') or ex.get('article') or ''
         summary = ex.get('summary') or ''
         
         if is_valid_summarization(article, summary):
@@ -102,7 +105,6 @@ def load_summarization_data(n_train: int = 3000, n_val: int = 300, tokenizer=Non
 
 def load_qa_data(tokenizer=None):
     print("[QA] Loading standard textbooks Nepali QA split...")
-    # FIX: Point directly to the script-free native layout mirror to prevent xquad.py asset blocks
     dataset = load_dataset("dineshkarki/textbooks-qa-nepali", split="train")
     data = []
     
