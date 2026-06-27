@@ -37,7 +37,7 @@ def format_qa(context: str, question: str, answer: str = None, tokenizer=None) -
 
 
 # ─────────────────────────────────────────────
-# CLEANING HELPERS (Safe & Permissive Boundary Limits)
+# CLEANING HELPERS
 # ─────────────────────────────────────────────
 
 def is_valid_translation_pair(src: str, tgt: str) -> bool:
@@ -50,7 +50,7 @@ def is_valid_summarization(article: str, summary: str) -> bool:
 
 
 # ─────────────────────────────────────────────
-# ROBUST DATASET LOADERS
+# ROBUST DATASET LOADERS (With Remote Code Trust)
 # ─────────────────────────────────────────────
 
 def load_translation_data(n_train: int = 5000, n_val: int = 500, tokenizer=None):
@@ -77,8 +77,8 @@ def load_translation_data(n_train: int = 5000, n_val: int = 500, tokenizer=None)
 
 def load_summarization_data(n_train: int = 3000, n_val: int = 300, tokenizer=None):
     print("[Summarization] Loading gold-standard csebuetnlp/xlsum Nepali split...")
-    # Using full load since XL-Sum Nepali partition is relatively lightweight and avoids stream-key dropping issues
-    dataset = load_dataset("csebuetnlp/xlsum", "nepali", split="train")
+    # CRITICAL FIX: Added trust_remote_code=True to bypass download script execution locks
+    dataset = load_dataset("csebuetnlp/xlsum", "nepali", split="train", trust_remote_code=True)
     filtered = []
     
     for ex in dataset:
@@ -90,11 +90,9 @@ def load_summarization_data(n_train: int = 3000, n_val: int = 300, tokenizer=Non
         if len(filtered) >= (n_train + n_val):
             break
 
-    # Robust fallback strategy in case feature structure variants occur
     if len(filtered) == 0:
         print("[Warning] Retrying loader with secondary data strategy...")
         for ex in dataset:
-            # Fallback to the first two keys dynamically present in row dictionary
             keys = list(ex.keys())
             if len(keys) >= 2:
                 article, summary = ex[keys[0]], ex[keys[1]]
@@ -115,16 +113,15 @@ def load_summarization_data(n_train: int = 3000, n_val: int = 300, tokenizer=Non
 
 def load_qa_data(tokenizer=None):
     print("[QA] Loading standard xquad Nepali QA split...")
-    dataset = load_dataset("xquad", "xquad.ne", split="train")
+    # CRITICAL FIX: Added trust_remote_code=True to protect against legacy xquad script checks
+    dataset = load_dataset("xquad", "xquad.ne", split="train", trust_remote_code=True)
     data = []
     
     for ex in dataset:
-        # Check standard xquad structural mapping signatures
         context = ex.get("context") or ''
         question = ex.get("question") or ''
         answers_dict = ex.get("answers", {})
         
-        # Pull text from native answers schema list
         answer = ""
         if answers_dict and "text" in answers_dict and len(answers_dict["text"]) > 0:
             answer = answers_dict["text"][0]
@@ -132,7 +129,6 @@ def load_qa_data(tokenizer=None):
         if question and answer:
             data.append({"context": str(context).strip(), "question": str(question).strip(), "answer": str(answer).strip()})
 
-    # Robust fallback structural lookup if xquad schema isn't directly matching top-level keys
     if len(data) == 0:
         print("[Warning] Evaluating direct mirror format layout patterns...")
         backup_dataset = load_dataset("dineshkarki/textbooks-qa-nepali", split="train")
@@ -155,7 +151,7 @@ def load_qa_data(tokenizer=None):
 
 
 # ─────────────────────────────────────────────
-# SAVE / LOAD JSONL FILE HANDLING
+# SAVE / LOAD JSONL
 # ─────────────────────────────────────────────
 
 def save_jsonl(data: list, path: str):
