@@ -1,0 +1,34 @@
+model:
+  name: unsloth/Llama-3.2-3B-Instruct-bnb-4bit
+  max_seq_length: 512
+  load_in_4bit: true
+
+qlora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+training:
+  num_epochs: 3
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  warmup_ratio: 0.1
+  lr_scheduler_type: cosine
+  optim: adamw_8bit
+  seed: 42
+
+data:
+  train_file: data/processed/summarization_train.jsonl
+  val_file: data/processed/summarization_val.jsonl
+  n_train: 3000
+  n_val: 300
+
+output:
+  adapter_dir: outputs/adapters/llama32-3b-nepali-summarization-qlora
+  hf_repo: iwasbinod/llama32-3b-nepali-summarization-qlora
+
+eval:
+  metric: rouge
+  n_samples: 100

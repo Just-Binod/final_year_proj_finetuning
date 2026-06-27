@@ -1,0 +1,13 @@
+data/processed/
+outputs/
+results/plots/
+*.bin
+*.safetensors
+*.ckpt
+*.pt
+__pycache__/
+.ipynb_checkpoints/
+*.egg-info/
+.env
+wandb/
+runs/
