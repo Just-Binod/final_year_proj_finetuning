@@ -82,17 +82,23 @@ def load_summarization_data(n_train: int = 3000, n_val: int = 300, tokenizer=Non
     
     dataset = load_dataset("realsanjeev/nepali-summarization-dataset", split="train")
     
-    for ex in dataset:
-        # Fallback to case-insensitive and alternative column names present in the CSV
-        article = ex.get('text') or ex.get('article') or ex.get('Text') or ex.get('Article') or ''
-        summary = ex.get('summary') or ex.get('Summary') or ''
+    for i, ex in enumerate(dataset):
+        # Adaptive Key Selection: Sort string fields by length to extract content dynamically
+        str_values = [str(val).strip() for val in ex.values() if val is not None]
+        str_values = sorted(str_values, key=len, reverse=True)
         
+        if len(str_values) >= 2:
+            article = str_values[0]   # The longest string is always the main text body
+            summary = str_values[1]   # The second longest string is the title/summary
+        else:
+            continue
+            
         if is_valid_summarization(article, summary):
-            filtered.append({"article": str(article).strip(), "summary": str(summary).strip()})
+            filtered.append({"article": article, "summary": summary})
+            
         if len(filtered) >= (n_train + n_val):
             break
 
-    # Fallback in case dataset size is smaller than requested limits
     actual_train = min(n_train, int(len(filtered) * 0.9))
     train_data = filtered[:actual_train]
     val_data = filtered[actual_train:actual_train + n_val] if actual_train < len(filtered) else filtered[actual_train:]
@@ -110,7 +116,6 @@ def load_qa_data(tokenizer=None):
     data = []
     
     for ex in dataset:
-        # Check if dataset is in ShareGPT / Conversational list format
         if "conversations" in ex and isinstance(ex["conversations"], list):
             question = ""
             answer = ""
