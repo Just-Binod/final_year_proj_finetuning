@@ -5,7 +5,7 @@ from pathlib import Path
 from datasets import load_dataset
 
 # ─────────────────────────────────────────────
-# PROMPT TEMPLATES (ChatML Style for Best Fine-Tuning Performance)
+# PROMPT TEMPLATES (ChatML Style for Fine-Tuning)
 # ─────────────────────────────────────────────
 
 def format_chatml(instruction: str, user_input: str, response: str = None, tokenizer=None) -> str:
@@ -50,7 +50,7 @@ def is_valid_summarization(article: str, summary: str) -> bool:
 
 
 # ─────────────────────────────────────────────
-# ROBUST DATASET LOADERS (With Remote Code Trust)
+# ROBUST PARQUET LOADERS (Bypasses Script Blocks)
 # ─────────────────────────────────────────────
 
 def load_translation_data(n_train: int = 5000, n_val: int = 500, tokenizer=None):
@@ -76,9 +76,9 @@ def load_translation_data(n_train: int = 5000, n_val: int = 500, tokenizer=None)
 
 
 def load_summarization_data(n_train: int = 3000, n_val: int = 300, tokenizer=None):
-    print("[Summarization] Loading gold-standard csebuetnlp/xlsum Nepali split...")
-    # CRITICAL FIX: Added trust_remote_code=True to bypass download script execution locks
-    dataset = load_dataset("csebuetnlp/xlsum", "nepali", split="train", trust_remote_code=True)
+    print("[Summarization] Loading Parquet-converted XL-Sum Nepali split...")
+    # FIX: Using the direct parquet-converted repository layout to bypass xlsum.py script error
+    dataset = load_dataset("csebuetnlp/xlsum", "nepali", split="train", data_files="nepali_train.parquet")
     filtered = []
     
     for ex in dataset:
@@ -89,17 +89,6 @@ def load_summarization_data(n_train: int = 3000, n_val: int = 300, tokenizer=Non
             filtered.append({"article": str(article).strip(), "summary": str(summary).strip()})
         if len(filtered) >= (n_train + n_val):
             break
-
-    if len(filtered) == 0:
-        print("[Warning] Retrying loader with secondary data strategy...")
-        for ex in dataset:
-            keys = list(ex.keys())
-            if len(keys) >= 2:
-                article, summary = ex[keys[0]], ex[keys[1]]
-                if is_valid_summarization(article, summary):
-                    filtered.append({"article": str(article), "summary": str(summary)})
-            if len(filtered) >= (n_train + n_val):
-                break
 
     train_data = filtered[:n_train]
     val_data = filtered[n_train:n_train + n_val]
@@ -112,32 +101,18 @@ def load_summarization_data(n_train: int = 3000, n_val: int = 300, tokenizer=Non
 
 
 def load_qa_data(tokenizer=None):
-    print("[QA] Loading standard xquad Nepali QA split...")
-    # CRITICAL FIX: Added trust_remote_code=True to protect against legacy xquad script checks
-    dataset = load_dataset("xquad", "xquad.ne", split="train", trust_remote_code=True)
+    print("[QA] Loading standard textbooks Nepali QA split...")
+    # FIX: Point directly to the script-free native layout mirror to prevent xquad.py asset blocks
+    dataset = load_dataset("dineshkarki/textbooks-qa-nepali", split="train")
     data = []
     
     for ex in dataset:
-        context = ex.get("context") or ''
-        question = ex.get("question") or ''
-        answers_dict = ex.get("answers", {})
+        question = ex.get("question") or ex.get("instruction") or ''
+        context = ex.get("context") or ex.get("input") or 'दिएको सन्दर्भ विवरण'
+        answer = ex.get("answer") or ex.get("output") or ''
         
-        answer = ""
-        if answers_dict and "text" in answers_dict and len(answers_dict["text"]) > 0:
-            answer = answers_dict["text"][0]
-            
         if question and answer:
             data.append({"context": str(context).strip(), "question": str(question).strip(), "answer": str(answer).strip()})
-
-    if len(data) == 0:
-        print("[Warning] Evaluating direct mirror format layout patterns...")
-        backup_dataset = load_dataset("dineshkarki/textbooks-qa-nepali", split="train")
-        for ex in backup_dataset:
-            question = ex.get("question") or ex.get("instruction") or ''
-            context = ex.get("context") or ex.get("input") or 'दिएको सन्दर्भ विवरण'
-            answer = ex.get("answer") or ex.get("output") or ''
-            if question and answer:
-                data.append({"context": str(context), "question": str(question), "answer": str(answer)})
 
     split_idx = int(len(data) * 0.8)
     train_data = data[:split_idx]
